@@ -5,6 +5,7 @@ import tarfile
 import io
 
 import pytest
+from omegaconf import open_dict
 
 from zotero_arxiv_daily.utils import glob_match, send_email, extract_tex_code_from_tar
 from tests.canned_responses import make_stub_smtp
@@ -142,6 +143,7 @@ def test_send_email_falls_back_to_ssl(config, monkeypatch):
     class StubSMTP_TLS_Fails:
         def __init__(self, *a, **kw):
             call_count["smtp"] += 1
+
         def starttls(self):
             raise OSError("TLS not supported")
 
@@ -167,12 +169,16 @@ def test_send_email_falls_back_to_plain(config, monkeypatch):
                 pass  # first SMTP() call succeeds, but starttls will fail
             else:
                 pass  # third SMTP() call is the plain fallback
+
         def starttls(self):
             raise OSError("TLS not supported")
+
         def login(self, u, p):
             pass
+
         def sendmail(self, s, r, m):
             sent.append((s, r, m))
+
         def quit(self):
             pass
 
@@ -184,6 +190,20 @@ def test_send_email_falls_back_to_plain(config, monkeypatch):
     monkeypatch.setattr(smtplib, "SMTP_SSL", StubSMTP_SSL_Fails)
     send_email(config, "<html>plain</html>")
     assert len(sent) == 1
+
+
+def test_send_email_uses_target_date_in_subject(config, monkeypatch):
+    sent = []
+    monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
+
+    with open_dict(config.source):
+        config.source.target_date = "2026-04-08"
+
+    send_email(config, "<html>dated</html>")
+
+    assert len(sent) == 1
+    _, _, body = sent[0]
+    assert "Subject: =?utf-8?q?Daily_arXiv_2026/04/08?=" in body
 
 
 # ---------------------------------------------------------------------------
@@ -218,11 +238,13 @@ def test_extract_tex_single_file(make_tar):
 
 
 def test_extract_tex_with_input_resolution(make_tar):
-    path = make_tar({
-        "main.tex": "\\begin{document}\n\\input{intro}\n\\end{document}",
-        "main.bbl": "",
-        "intro.tex": "This is the introduction.",
-    })
+    path = make_tar(
+        {
+            "main.tex": "\\begin{document}\n\\input{intro}\n\\end{document}",
+            "main.bbl": "",
+            "intro.tex": "This is the introduction.",
+        }
+    )
     result = extract_tex_code_from_tar(path, "test-paper")
     assert "This is the introduction." in result["all"]
 
@@ -241,10 +263,12 @@ def test_extract_tex_not_a_tar(tmp_path):
 
 
 def test_extract_tex_multiple_tex_no_bbl(make_tar):
-    path = make_tar({
-        "a.tex": "\\section{A}",
-        "b.tex": "\\begin{document}\nMain content\n\\end{document}",
-    })
+    path = make_tar(
+        {
+            "a.tex": "\\section{A}",
+            "b.tex": "\\begin{document}\nMain content\n\\end{document}",
+        }
+    )
     result = extract_tex_code_from_tar(path, "test-paper")
     assert result is not None
     assert "Main content" in result["all"]
