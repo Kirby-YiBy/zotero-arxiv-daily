@@ -34,7 +34,10 @@ def test_normalize_path_patterns_rejects_single_string_for_ignore_path():
 
 def test_normalize_path_patterns_accepts_list_config_for_ignore_path():
     ignore_path = OmegaConf.create(["archive/**", "2025/**"])
-    assert normalize_path_patterns(ignore_path, "ignore_path") == ["archive/**", "2025/**"]
+    assert normalize_path_patterns(ignore_path, "ignore_path") == [
+        "archive/**",
+        "2025/**",
+    ]
 
 
 def test_normalize_path_patterns_accepts_empty_list():
@@ -52,17 +55,42 @@ def test_normalize_path_patterns_accepts_none():
 
 def _make_executor(include_patterns=None, ignore_patterns=None):
     executor = Executor.__new__(Executor)
-    executor.include_path_patterns = normalize_path_patterns(include_patterns, "include_path") if include_patterns else None
-    executor.ignore_path_patterns = normalize_path_patterns(ignore_patterns, "ignore_path") if ignore_patterns else None
+    executor.include_path_patterns = (
+        normalize_path_patterns(include_patterns, "include_path")
+        if include_patterns
+        else None
+    )
+    executor.ignore_path_patterns = (
+        normalize_path_patterns(ignore_patterns, "ignore_path")
+        if ignore_patterns
+        else None
+    )
     return executor
 
 
 def test_filter_corpus_matches_any_path_against_any_pattern():
-    executor = _make_executor(include_patterns=["2026/survey/**", "2026/reading-group/**"])
+    executor = _make_executor(
+        include_patterns=["2026/survey/**", "2026/reading-group/**"]
+    )
     corpus = [
-        CorpusPaper(title="Survey Paper", abstract="", added_date=datetime(2026, 1, 1), paths=["2026/survey/topic-a", "archive/misc"]),
-        CorpusPaper(title="Reading Group Paper", abstract="", added_date=datetime(2026, 1, 2), paths=["notes/inbox", "2026/reading-group/week-1"]),
-        CorpusPaper(title="Excluded Paper", abstract="", added_date=datetime(2026, 1, 3), paths=["2025/other/topic"]),
+        CorpusPaper(
+            title="Survey Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 1),
+            paths=["2026/survey/topic-a", "archive/misc"],
+        ),
+        CorpusPaper(
+            title="Reading Group Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 2),
+            paths=["notes/inbox", "2026/reading-group/week-1"],
+        ),
+        CorpusPaper(
+            title="Excluded Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 3),
+            paths=["2025/other/topic"],
+        ),
     ]
     filtered = executor.filter_corpus(corpus)
     assert [p.title for p in filtered] == ["Survey Paper", "Reading Group Paper"]
@@ -71,19 +99,46 @@ def test_filter_corpus_matches_any_path_against_any_pattern():
 def test_filter_corpus_excludes_papers_matching_ignore_path():
     executor = _make_executor(ignore_patterns=["archive/**", "2025/**"])
     corpus = [
-        CorpusPaper(title="Active Paper", abstract="", added_date=datetime(2026, 1, 1), paths=["2026/survey/topic-a"]),
-        CorpusPaper(title="Archived Paper", abstract="", added_date=datetime(2026, 1, 2), paths=["archive/misc"]),
-        CorpusPaper(title="Old Paper", abstract="", added_date=datetime(2026, 1, 3), paths=["2025/other/topic"]),
+        CorpusPaper(
+            title="Active Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 1),
+            paths=["2026/survey/topic-a"],
+        ),
+        CorpusPaper(
+            title="Archived Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 2),
+            paths=["archive/misc"],
+        ),
+        CorpusPaper(
+            title="Old Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 3),
+            paths=["2025/other/topic"],
+        ),
     ]
     filtered = executor.filter_corpus(corpus)
     assert [p.title for p in filtered] == ["Active Paper"]
 
 
 def test_filter_corpus_ignore_path_takes_precedence_over_include_path():
-    executor = _make_executor(include_patterns=["2026/**"], ignore_patterns=["2026/ignore/**"])
+    executor = _make_executor(
+        include_patterns=["2026/**"], ignore_patterns=["2026/ignore/**"]
+    )
     corpus = [
-        CorpusPaper(title="Included Paper", abstract="", added_date=datetime(2026, 1, 1), paths=["2026/survey/topic-a"]),
-        CorpusPaper(title="Ignored Paper", abstract="", added_date=datetime(2026, 1, 2), paths=["2026/ignore/topic-b"]),
+        CorpusPaper(
+            title="Included Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 1),
+            paths=["2026/survey/topic-a"],
+        ),
+        CorpusPaper(
+            title="Ignored Paper",
+            abstract="",
+            added_date=datetime(2026, 1, 2),
+            paths=["2026/ignore/topic-b"],
+        ),
     ]
     filtered = executor.filter_corpus(corpus)
     assert [p.title for p in filtered] == ["Included Paper"]
@@ -92,8 +147,12 @@ def test_filter_corpus_ignore_path_takes_precedence_over_include_path():
 def test_filter_corpus_no_filters_returns_all():
     executor = _make_executor()
     corpus = [
-        CorpusPaper(title="Paper A", abstract="", added_date=datetime(2026, 1, 1), paths=["foo"]),
-        CorpusPaper(title="Paper B", abstract="", added_date=datetime(2026, 1, 2), paths=["bar"]),
+        CorpusPaper(
+            title="Paper A", abstract="", added_date=datetime(2026, 1, 1), paths=["foo"]
+        ),
+        CorpusPaper(
+            title="Paper B", abstract="", added_date=datetime(2026, 1, 2), paths=["bar"]
+        ),
     ]
     filtered = executor.filter_corpus(corpus)
     assert filtered == corpus
@@ -108,7 +167,9 @@ def test_fetch_zotero_corpus(config, monkeypatch):
     from tests.canned_responses import make_stub_zotero_client
 
     stub_zot = make_stub_zotero_client()
-    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot
+    )
 
     executor = Executor.__new__(Executor)
     executor.config = config
@@ -133,7 +194,9 @@ def test_fetch_zotero_corpus_paper_with_zero_collections(config, monkeypatch):
         }
     ]
     stub_zot = make_stub_zotero_client(items=items)
-    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot
+    )
 
     executor = Executor.__new__(Executor)
     executor.config = config
@@ -170,12 +233,16 @@ def test_run_end_to_end(config, monkeypatch):
 
     # 1. Stub pyzotero
     stub_zot = make_stub_zotero_client()
-    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot
+    )
 
     # 2. Stub OpenAI (for reranker + TLDR/affiliations)
     stub_client = make_stub_openai_client()
     monkeypatch.setattr("zotero_arxiv_daily.executor.OpenAI", lambda **kw: stub_client)
-    monkeypatch.setattr("zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client
+    )
     retrieved = [
         make_sample_paper(title="E2E Paper 1", score=None),
         make_sample_paper(title="E2E Paper 2", score=None),
@@ -209,13 +276,21 @@ def test_run_end_to_end(config, monkeypatch):
     assert "text/html" in email_body
 
 
+def test_target_date_defaults_to_none(config):
+    assert config.source.target_date is None
+
+
 def test_run_no_papers_send_empty_false(config, monkeypatch):
     """When no papers are found and send_empty=false, no email is sent."""
     import smtplib
 
     from omegaconf import open_dict
 
-    from tests.canned_responses import make_stub_openai_client, make_stub_smtp, make_stub_zotero_client
+    from tests.canned_responses import (
+        make_stub_openai_client,
+        make_stub_smtp,
+        make_stub_zotero_client,
+    )
 
     with open_dict(config):
         config.executor.source = ["arxiv"]
@@ -223,17 +298,23 @@ def test_run_no_papers_send_empty_false(config, monkeypatch):
         config.executor.send_empty = False
 
     stub_zot = make_stub_zotero_client()
-    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot
+    )
 
     stub_client = make_stub_openai_client()
     monkeypatch.setattr("zotero_arxiv_daily.executor.OpenAI", lambda **kw: stub_client)
-    monkeypatch.setattr("zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client
+    )
 
     import zotero_arxiv_daily.retriever.arxiv_retriever  # noqa: F401
 
     from zotero_arxiv_daily.retriever.base import registered_retrievers
 
-    monkeypatch.setattr(registered_retrievers["arxiv"], "retrieve_papers", lambda self: [])
+    monkeypatch.setattr(
+        registered_retrievers["arxiv"], "retrieve_papers", lambda self: []
+    )
 
     sent = []
     monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
@@ -251,7 +332,11 @@ def test_run_no_papers_send_empty_true(config, monkeypatch):
 
     from omegaconf import open_dict
 
-    from tests.canned_responses import make_stub_openai_client, make_stub_smtp, make_stub_zotero_client
+    from tests.canned_responses import (
+        make_stub_openai_client,
+        make_stub_smtp,
+        make_stub_zotero_client,
+    )
 
     with open_dict(config):
         config.executor.source = ["arxiv"]
@@ -259,17 +344,23 @@ def test_run_no_papers_send_empty_true(config, monkeypatch):
         config.executor.send_empty = True
 
     stub_zot = make_stub_zotero_client()
-    monkeypatch.setattr("zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.executor.zotero.Zotero", lambda *a, **kw: stub_zot
+    )
 
     stub_client = make_stub_openai_client()
     monkeypatch.setattr("zotero_arxiv_daily.executor.OpenAI", lambda **kw: stub_client)
-    monkeypatch.setattr("zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client)
+    monkeypatch.setattr(
+        "zotero_arxiv_daily.reranker.api.OpenAI", lambda **kw: stub_client
+    )
 
     import zotero_arxiv_daily.retriever.arxiv_retriever  # noqa: F401
 
     from zotero_arxiv_daily.retriever.base import registered_retrievers
 
-    monkeypatch.setattr(registered_retrievers["arxiv"], "retrieve_papers", lambda self: [])
+    monkeypatch.setattr(
+        registered_retrievers["arxiv"], "retrieve_papers", lambda self: []
+    )
 
     sent = []
     monkeypatch.setattr(smtplib, "SMTP", make_stub_smtp(sent))
@@ -278,6 +369,8 @@ def test_run_no_papers_send_empty_true(config, monkeypatch):
     executor = Executor(config)
     executor.run()
 
-    assert len(sent) == 1, "Email should be sent even with no papers when send_empty=true"
+    assert len(sent) == 1, (
+        "Email should be sent even with no papers when send_empty=true"
+    )
     _, _, body = sent[0]
     assert "text/html" in body

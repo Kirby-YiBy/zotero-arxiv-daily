@@ -2,8 +2,10 @@
 
 import time
 from types import SimpleNamespace
+from typing import cast
 
 import feedparser
+from omegaconf import open_dict
 
 from zotero_arxiv_daily.retriever.arxiv_retriever import (
     ArxivRetriever,
@@ -130,7 +132,32 @@ def test_convert_to_paper_uses_pdf_text_for_affiliations(config, monkeypatch):
         arxiv_retriever, "extract_text_from_tar", lambda paper: "TAR TEXT"
     )
 
-    paper = retriever.convert_to_paper(raw_paper)
+    paper = retriever.convert_to_paper(cast(object, raw_paper))
 
     assert paper.full_text == "HTML TEXT"
     assert paper.affiliation_text == "PDF TEXT"
+
+
+def test_arxiv_retriever_uses_date_override_query(config, monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        def results(self, search):
+            captured["query"] = search.query
+            captured["max_results"] = search.max_results
+            return iter([])
+
+    monkeypatch.setattr(arxiv_retriever.arxiv, "Client", FakeClient)
+    monkeypatch.setattr(arxiv_retriever.feedparser, "parse", lambda *_: None)
+
+    with open_dict(config.source):
+        config.source.target_date = "2026-04-08"
+
+    retriever = ArxivRetriever(config)
+    papers = retriever.retrieve_papers()
+
+    assert papers == []
+    assert "submittedDate:[202604080000 TO 202604082359]" in str(captured["query"])
