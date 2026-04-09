@@ -43,7 +43,10 @@ def _stub_embeddings_create(**kwargs):
     inputs = kwargs.get("input", [])
     n = len(inputs) if isinstance(inputs, list) else 1
     return SimpleNamespace(
-        data=[SimpleNamespace(embedding=[0.1, 0.2, 0.3], index=i, object="embedding") for i in range(n)],
+        data=[
+            SimpleNamespace(embedding=[0.1, 0.2, 0.3], index=i, object="embedding")
+            for i in range(n)
+        ],
         model="text-embedding-3-large",
         object="list",
     )
@@ -173,6 +176,7 @@ def make_sample_paper(**overrides) -> Paper:
         url="https://arxiv.org/abs/2026.00001",
         pdf_url="https://arxiv.org/pdf/2026.00001",
         full_text="\\begin{document} Some text. \\end{document}",
+        affiliation_text=None,
         tldr=None,
         affiliations=None,
         score=None,

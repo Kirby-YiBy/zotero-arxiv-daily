@@ -41,7 +41,9 @@ def test_tldr_falls_back_to_abstract_on_error(llm_params):
 
     broken_client = SimpleNamespace(
         chat=SimpleNamespace(
-            completions=SimpleNamespace(create=lambda **kw: (_ for _ in ()).throw(RuntimeError("API down")))
+            completions=SimpleNamespace(
+                create=lambda **kw: (_ for _ in ()).throw(RuntimeError("API down"))
+            )
         )
     )
     result = paper.generate_tldr(broken_client, llm_params)
@@ -69,6 +71,32 @@ def test_affiliations_returns_parsed_list(llm_params):
     assert "Peking University" in result
 
 
+def test_affiliations_prefers_affiliation_text_over_full_text(llm_params):
+    from types import SimpleNamespace
+
+    def create_selective_response(**kwargs):
+        user_prompt = kwargs["messages"][1]["content"]
+        if "PDF_ONLY_AFFILIATION_TEXT" in user_prompt:
+            content = '["PDF University"]'
+        else:
+            content = '["HTML University"]'
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+        )
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create_selective_response)
+        )
+    )
+    paper = make_sample_paper(full_text="HTML_ONLY_TEXT")
+    paper.affiliation_text = "PDF_ONLY_AFFILIATION_TEXT"
+
+    result = paper.generate_affiliations(client, llm_params)
+
+    assert result == ["PDF University"]
+
+
 def test_affiliations_none_without_fulltext(llm_params):
     client = make_stub_openai_client()
     paper = make_sample_paper(full_text=None)
@@ -94,15 +122,15 @@ def test_affiliations_malformed_llm_output(llm_params):
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
-                    message=SimpleNamespace(content="TsingHua University, Peking University"),
+                    message=SimpleNamespace(
+                        content="TsingHua University, Peking University"
+                    ),
                 )
             ]
         )
 
     client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(create=create_no_brackets)
-        )
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create_no_brackets))
     )
     paper = make_sample_paper()
     result = paper.generate_affiliations(client, llm_params)
@@ -115,7 +143,9 @@ def test_affiliations_error_returns_none(llm_params):
 
     broken_client = SimpleNamespace(
         chat=SimpleNamespace(
-            completions=SimpleNamespace(create=lambda **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+            completions=SimpleNamespace(
+                create=lambda **kw: (_ for _ in ()).throw(RuntimeError("boom"))
+            )
         )
     )
     paper = make_sample_paper()

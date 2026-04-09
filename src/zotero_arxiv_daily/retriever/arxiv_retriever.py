@@ -49,9 +49,13 @@ def _run_with_hard_timeout(
     paper_title: str,
 ) -> T | None:
     start_methods = multiprocessing.get_all_start_methods()
-    context = multiprocessing.get_context("fork" if "fork" in start_methods else start_methods[0])
+    context = multiprocessing.get_context(
+        "fork" if "fork" in start_methods else start_methods[0]
+    )
     result_queue = context.Queue()
-    process = context.Process(target=_run_in_subprocess, args=(result_queue, func, args))
+    process = context.Process(
+        target=_run_in_subprocess, args=(result_queue, func, args)
+    )
     process.start()
 
     try:
@@ -62,7 +66,9 @@ def _run_with_hard_timeout(
         process.join(5)
         result_queue.close()
         result_queue.join_thread()
-        logger.warning(f"{operation} timed out for {paper_title} after {timeout} seconds")
+        logger.warning(
+            f"{operation} timed out for {paper_title} after {timeout} seconds"
+        )
         return None
 
     process.join(5)
@@ -114,11 +120,11 @@ class ArxivRetriever(BaseRetriever):
 
     def _retrieve_raw_papers(self) -> list[ArxivResult]:
         client = arxiv.Client(num_retries=10, delay_seconds=10)
-        query = '+'.join(self.config.source.arxiv.category)
+        query = "+".join(self.config.source.arxiv.category)
         include_cross_list = self.config.source.arxiv.get("include_cross_list", False)
         # Get the latest paper from arxiv rss feed
         feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")
-        if 'Feed error for query' in feed.feed.title:
+        if "Feed error for query" in feed.feed.title:
             raise Exception(f"Invalid ARXIV_QUERY: {query}.")
         raw_papers = []
         allowed_announce_types = {"new", "cross"} if include_cross_list else {"new"}
@@ -133,7 +139,7 @@ class ArxivRetriever(BaseRetriever):
         # Get full information of each paper from arxiv api
         bar = tqdm(total=len(all_paper_ids))
         for i in range(0, len(all_paper_ids), 20):
-            search = arxiv.Search(id_list=all_paper_ids[i:i + 20])
+            search = arxiv.Search(id_list=all_paper_ids[i : i + 20])
             batch = list(client.results(search))
             bar.update(len(batch))
             raw_papers.extend(batch)
@@ -146,9 +152,10 @@ class ArxivRetriever(BaseRetriever):
         authors = [a.name for a in raw_paper.authors]
         abstract = raw_paper.summary
         pdf_url = raw_paper.pdf_url
+        pdf_text = extract_text_from_pdf(raw_paper)
         full_text = extract_text_from_html(raw_paper)
         if full_text is None:
-            full_text = extract_text_from_pdf(raw_paper)
+            full_text = pdf_text
         if full_text is None:
             full_text = extract_text_from_tar(raw_paper)
         return Paper(
@@ -159,6 +166,7 @@ class ArxivRetriever(BaseRetriever):
             url=raw_paper.entry_id,
             pdf_url=pdf_url,
             full_text=full_text,
+            affiliation_text=pdf_text,
         )
 
 
