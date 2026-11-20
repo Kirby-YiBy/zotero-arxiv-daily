@@ -1,14 +1,33 @@
 name: Send emails daily
+
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: '忽略"今天已发过"检查，强制再发一封'
+        type: boolean
+        default: false
   schedule:
-    # 22:17 UTC = 06:17 Beijing time. Off the top of the hour, where GitHub's
-    # scheduled-run queue is most congested (docs: schedule runs may be delayed).
-    - cron: '17 22 * * *'
+    # GitHub 的 cron 队列会延迟（这个仓库历史上稳定晚 2-5 小时）甚至整次丢弃
+    # （2026-10-09~10-21 丢过一次，2026-11-07~11-19 又丢了 12 天）。
+    # 一天多给几个 tick 互相兜底，靠下面 guard 步骤保证一天只发一封。
+    - cron: '17 22 * * *'   # 北京 06:17
+    - cron: '17 0 * * *'    # 北京 08:17
+    - cron: '17 2 * * *'    # 北京 10:17
+
+# 同一天的多次触发排队串行，避免两封邮件同时跑、互相看不见对方
+concurrency:
+  group: daily-email
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   calculate-and-send:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -16,10 +35,40 @@ jobs:
           repository: ${{ vars.REPOSITORY }}
           ref: ${{ vars.REF }}
 
+      - name: Check whether today's email was already sent
+        id: guard
+        continue-on-error: true # 这一步出问题就照常发信，绝不因为它而漏发
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -uo pipefail
+          if [ "${FORCE:-false}" = "true" ]; then
+            echo "force=true, skip guard"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 只回看 6 小时：单次运行最长约 5 小时，所以近 6 小时内
+          # 有"还在跑"或"已经成功"的运行，就说明今天这封已经在处理/已发出。
+          cutoff=$(date -u -d '6 hours ago' +%FT%TZ)
+          filter="[.[] | select(.databaseId != ${RUN_ID}) | select(.createdAt >= \"${cutoff}\") | select(.status != \"completed\" or .conclusion == \"success\")] | length"
+          count=$(gh run list --repo "${{ github.repository }}" --workflow main.yml --limit 50 \
+                    --json databaseId,createdAt,status,conclusion --jq "$filter" 2>/dev/null || echo "")
+          [[ "$count" =~ ^[0-9]+$ ]] || count=0
+          echo "recent runs (still running or succeeded) since ${cutoff}: ${count}"
+          if [ "$count" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup uv
+        if: steps.guard.outputs.skip != 'true'
         uses: astral-sh/setup-uv@v7
 
       - name: Run script
+        if: steps.guard.outputs.skip != 'true'
         env:
           ZOTERO_ID: ${{ secrets.ZOTERO_ID }}
           ZOTERO_KEY: ${{ secrets.ZOTERO_KEY }}
@@ -34,3 +83,17 @@ jobs:
           echo "Use custom config: "
           cat config/custom.yaml
           uv run src/zotero_arxiv_daily/main.py
+
+      # 可选：配一个 healthchecks.io 之类的 check 的 ping URL（存成 secret
+      # HEALTHCHECKS_URL），超过 24 小时没 ping 它就给你发告警，
+      # 这样"整天没跑"这种事不会再静默下去。
+      - name: Heartbeat
+        if: success() && steps.guard.outputs.skip != 'true'
+        env:
+          HC_URL: ${{ secrets.HEALTHCHECKS_URL }}
+        run: |
+          if [ -n "${HC_URL:-}" ]; then
+            curl -fsS -m 10 --retry 3 "$HC_URL" || true
+          else
+            echo "HEALTHCHECKS_URL 未配置，跳过"
+          fi

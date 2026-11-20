@@ -3,9 +3,10 @@ name: Keep Alive
 on:
   workflow_dispatch:
   schedule:
-    # Run weekly (Monday 00:00 UTC) to keep the repository active. The old
-    # '0 0 */30 * *' only fires on the 1st and 31st, leaving long gaps.
+    # 每周两次（周一、周四 00:00 UTC）。GitHub 的定时任务本身会丢 tick，
+    # 多给一次机会；keep-alive.txt 的内容只精确到"天"，同一天跑两次也只会提交一次。
     - cron: '0 0 * * 1'
+    - cron: '0 0 * * 4'
 
 jobs:
   keep-alive:
@@ -21,7 +22,7 @@ jobs:
       - name: Update keep-alive file
         run: |
           mkdir -p .github
-          echo "Last run: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" > .github/keep-alive.txt
+          echo "Last run: $(date -u +'%Y-%m-%d') UTC" > .github/keep-alive.txt
           echo "This file is automatically updated to keep the repository active and prevent GitHub Actions from disabling scheduled workflows." >> .github/keep-alive.txt
 
       - name: Commit and push if changed
