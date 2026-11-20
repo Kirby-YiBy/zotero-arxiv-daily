@@ -49,9 +49,12 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # 只回看 6 小时：单次运行最长约 5 小时，所以近 6 小时内
-          # 有"还在跑"或"已经成功"的运行，就说明今天这封已经在处理/已发出。
-          cutoff=$(date -u -d '6 hours ago' +%FT%TZ)
+          # 以北京时间的"今天 00:00"（= 前一天 16:00 UTC）为界。
+          # 用纯算术换算（UTC+8 = 28800 秒），不依赖 runner 上有没有装 tzdata。
+          # 只要今天已有"还在跑"或"已经成功"的运行，就不再发；
+          # 想在同一天强发，用 workflow_dispatch 的 force=true。
+          bj_midnight=$(( ( ($(date -u +%s) + 28800) / 86400 ) * 86400 - 28800 ))
+          cutoff=$(date -u -d "@${bj_midnight}" +%FT%TZ)
           filter="[.[] | select(.databaseId != ${RUN_ID}) | select(.createdAt >= \"${cutoff}\") | select(.status != \"completed\" or .conclusion == \"success\")] | length"
           count=$(gh run list --repo "${{ github.repository }}" --workflow main.yml --limit 50 \
                     --json databaseId,createdAt,status,conclusion --jq "$filter" 2>/dev/null || echo "")
